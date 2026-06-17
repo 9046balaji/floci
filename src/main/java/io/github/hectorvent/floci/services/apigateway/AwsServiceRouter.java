@@ -19,6 +19,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Routes API Gateway AWS integration requests to the correct internal service handler.
@@ -75,14 +77,26 @@ public class AwsServiceRouter {
         this.acmHandler = acmHandler;
     }
 
+    private static final Pattern ACTION_URI_PATTERN = Pattern.compile(
+            "^arn:aws:apigateway:([^:]+):([^:]+):action/(.+)$"
+    );
+    private static final Pattern PATH_URI_PATTERN = Pattern.compile(
+            "^arn:aws:apigateway:([^:]+):([^:]+):path/(.+)$"
+    );
+
     /**
      * Parsed components of an API Gateway AWS integration URI.
      */
-    public record IntegrationTarget(String region, String service, String action) {}
+    public record IntegrationTarget(String region, String service, String action, String path) {
+        public IntegrationTarget(String region, String service, String action) {
+            this(region, service, action, null);
+        }
+    }
 
     /**
      * Parses an integration URI like
-     * {@code arn:aws:apigateway:us-east-1:states:action/StartExecution}.
+     * {@code arn:aws:apigateway:us-east-1:states:action/StartExecution} or
+     * {@code arn:aws:apigateway:us-east-1:sqs:path/123456789012/my-queue}.
      *
      * @return parsed target, or null if the URI format is not recognized
      */
@@ -90,20 +104,28 @@ public class AwsServiceRouter {
         if (uri == null || !uri.startsWith("arn:aws:apigateway:")) {
             return null;
         }
-        // arn:aws:apigateway:{region}:{service}:action/{Action}
-        String[] parts = uri.split(":");
-        if (parts.length < 6) {
-            return null;
+
+        Matcher actionMatcher = ACTION_URI_PATTERN.matcher(uri);
+        if (actionMatcher.matches()) {
+            return new IntegrationTarget(
+                actionMatcher.group(1),
+                actionMatcher.group(2),
+                actionMatcher.group(3),
+                null
+            );
         }
-        String region = parts[3];
-        String service = parts[4];
-        // parts[5] should be "action/{ActionName}"
-        String actionPart = parts[5];
-        if (!actionPart.startsWith("action/")) {
-            return null;
+
+        Matcher pathMatcher = PATH_URI_PATTERN.matcher(uri);
+        if (pathMatcher.matches()) {
+            return new IntegrationTarget(
+                pathMatcher.group(1),
+                pathMatcher.group(2),
+                null,
+                pathMatcher.group(3)
+            );
         }
-        String action = actionPart.substring("action/".length());
-        return new IntegrationTarget(region, service, action);
+
+        return null;
     }
 
     /**
