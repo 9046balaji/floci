@@ -366,17 +366,31 @@ public class SecretsManagerJsonHandler {
     }
 
     private Response handleRotateSecret(JsonNode request, String region) {
+        System.out.println("handleRotateSecret JSON request: " + request.toString());
         String secretId = request.path("SecretId").asText();
         String clientRequestToken = request.has("ClientRequestToken") ? request.path("ClientRequestToken").asText() : java.util.UUID.randomUUID().toString();
-        String lambdaArn = request.has("RotationLambdaARN") ? request.path("RotationLambdaARN").asText() : null;
-        boolean rotateImmediately = request.path("RotateImmediately").asBoolean(true);
+        
+        String lambdaArn = request.has("RotationLambdaARN") ? request.path("RotationLambdaARN").asText() : 
+                          (request.has("rotationLambdaARN") ? request.path("rotationLambdaARN").asText() : null);
+                          
+        boolean rotateImmediately = true;
+        if (request.has("RotateImmediately")) {
+            rotateImmediately = request.path("RotateImmediately").asBoolean();
+        } else if (request.has("rotateImmediately")) {
+            rotateImmediately = request.path("rotateImmediately").asBoolean();
+        }
 
         Secret.RotationRules rotationRules = null;
-        if (request.has("RotationRules")) {
-            JsonNode rulesNode = request.path("RotationRules");
-            Integer automaticallyAfterDays = rulesNode.has("AutomaticallyAfterDays") ? rulesNode.path("AutomaticallyAfterDays").asInt() : null;
-            String duration = rulesNode.has("Duration") ? rulesNode.path("Duration").asText() : null;
-            String scheduleExpression = rulesNode.has("ScheduleExpression") ? rulesNode.path("ScheduleExpression").asText() : null;
+        JsonNode rulesNode = request.has("RotationRules") ? request.path("RotationRules") : 
+                            (request.has("rotationRules") ? request.path("rotationRules") : null);
+        
+        if (rulesNode != null && !rulesNode.isNull()) {
+            Integer automaticallyAfterDays = rulesNode.has("AutomaticallyAfterDays") ? rulesNode.path("AutomaticallyAfterDays").asInt() : 
+                                            (rulesNode.has("automaticallyAfterDays") ? rulesNode.path("automaticallyAfterDays").asInt() : null);
+            String duration = rulesNode.has("Duration") ? rulesNode.path("Duration").asText() : 
+                             (rulesNode.has("duration") ? rulesNode.path("duration").asText() : null);
+            String scheduleExpression = rulesNode.has("ScheduleExpression") ? rulesNode.path("ScheduleExpression").asText() : 
+                                       (rulesNode.has("scheduleExpression") ? rulesNode.path("scheduleExpression").asText() : null);
             rotationRules = new Secret.RotationRules(automaticallyAfterDays, duration, scheduleExpression);
         }
 

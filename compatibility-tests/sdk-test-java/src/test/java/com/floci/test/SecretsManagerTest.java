@@ -217,6 +217,7 @@ class SecretsManagerTest {
     void rotateSecretStub() {
         RotateSecretResponse rotateResponse = sm.rotateSecret(RotateSecretRequest.builder()
                 .secretId(secretName)
+                .rotationLambdaARN("arn:aws:lambda:us-east-1:000000000000:function:RotationLambda")
                 .rotationRules(RotationRulesType.builder().automaticallyAfterDays(30L).build())
                 .build());
 
