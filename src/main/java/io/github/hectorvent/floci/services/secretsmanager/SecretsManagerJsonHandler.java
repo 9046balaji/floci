@@ -148,13 +148,14 @@ public class SecretsManagerJsonHandler {
         String secretId = request.path("SecretId").asText();
         String secretString = request.has("SecretString") ? request.path("SecretString").asText() : null;
         String secretBinary = request.has("SecretBinary") ? request.path("SecretBinary").asText() : null;
+        String clientRequestToken = request.has("ClientRequestToken") ? request.path("ClientRequestToken").asText() : null;
 
         List<String> versionStages = request.has("VersionStages") && request.path("VersionStages").isArray()
                 ? StreamSupport.stream(request.path("VersionStages").spliterator(), false).map(JsonNode::asText).toList()
                 : null;
 
         Secret secret = service.describeSecret(secretId, region);
-        SecretVersion version = service.putSecretValue(secretId, secretString, secretBinary, region, versionStages);
+        SecretVersion version = service.putSecretValue(secretId, secretString, secretBinary, clientRequestToken, region, versionStages);
 
         ObjectNode response = objectMapper.createObjectNode();
         response.put("ARN", secret.getArn());
@@ -179,7 +180,8 @@ public class SecretsManagerJsonHandler {
 
         String versionId = null;
         if (secretString != null || secretBinary != null) {
-            SecretVersion version = service.putSecretValue(secretId, secretString, secretBinary, region, null);
+            String clientRequestToken = request.has("ClientRequestToken") ? request.path("ClientRequestToken").asText() : java.util.UUID.randomUUID().toString();
+            SecretVersion version = service.putSecretValue(secretId, secretString, secretBinary, clientRequestToken, region, null);
             versionId = version.getVersionId();
         }
 
@@ -206,6 +208,22 @@ public class SecretsManagerJsonHandler {
             response.put("KmsKeyId", secret.getKmsKeyId());
         }
         response.put("RotationEnabled", secret.isRotationEnabled());
+        if (secret.getRotationLambdaArn() != null) {
+            response.put("RotationLambdaARN", secret.getRotationLambdaArn());
+        }
+        if (secret.getRotationRules() != null) {
+            ObjectNode rulesNode = objectMapper.createObjectNode();
+            if (secret.getRotationRules().automaticallyAfterDays() != null) rulesNode.put("AutomaticallyAfterDays", secret.getRotationRules().automaticallyAfterDays());
+            if (secret.getRotationRules().duration() != null) rulesNode.put("Duration", secret.getRotationRules().duration());
+            if (secret.getRotationRules().scheduleExpression() != null) rulesNode.put("ScheduleExpression", secret.getRotationRules().scheduleExpression());
+            response.set("RotationRules", rulesNode);
+        }
+        if (secret.getLastRotatedDate() != null) {
+            response.put("LastRotatedDate", secret.getLastRotatedDate().toEpochMilli() / 1000.0);
+        }
+        if (secret.getNextRotationDate() != null) {
+            response.put("NextRotationDate", secret.getNextRotationDate().toEpochMilli() / 1000.0);
+        }
         if (secret.getCreatedDate() != null) {
             response.put("CreatedDate", secret.getCreatedDate().toEpochMilli() / 1000.0);
         }
@@ -349,20 +367,25 @@ public class SecretsManagerJsonHandler {
 
     private Response handleRotateSecret(JsonNode request, String region) {
         String secretId = request.path("SecretId").asText();
+        String clientRequestToken = request.has("ClientRequestToken") ? request.path("ClientRequestToken").asText() : java.util.UUID.randomUUID().toString();
         String lambdaArn = request.has("RotationLambdaARN") ? request.path("RotationLambdaARN").asText() : null;
         boolean rotateImmediately = request.path("RotateImmediately").asBoolean(true);
 
-        Map<String, Integer> rules = new HashMap<>();
-        JsonNode rulesNode = request.path("RotationRules");
-        if (rulesNode.has("AutomaticallyAfterDays")) {
-            rules.put("AutomaticallyAfterDays", rulesNode.path("AutomaticallyAfterDays").asInt());
+        Secret.RotationRules rotationRules = null;
+        if (request.has("RotationRules")) {
+            JsonNode rulesNode = request.path("RotationRules");
+            Integer automaticallyAfterDays = rulesNode.has("AutomaticallyAfterDays") ? rulesNode.path("AutomaticallyAfterDays").asInt() : null;
+            String duration = rulesNode.has("Duration") ? rulesNode.path("Duration").asText() : null;
+            String scheduleExpression = rulesNode.has("ScheduleExpression") ? rulesNode.path("ScheduleExpression").asText() : null;
+            rotationRules = new Secret.RotationRules(automaticallyAfterDays, duration, scheduleExpression);
         }
 
-        Secret secret = service.rotateSecret(secretId, lambdaArn, rules, rotateImmediately, region);
+        Secret secret = service.rotateSecret(secretId, clientRequestToken, lambdaArn, rotationRules, rotateImmediately, region);
 
         ObjectNode response = objectMapper.createObjectNode();
         response.put("ARN", secret.getArn());
         response.put("Name", secret.getName());
+        response.put("VersionId", clientRequestToken);
         return Response.ok(response).build();
     }
 
