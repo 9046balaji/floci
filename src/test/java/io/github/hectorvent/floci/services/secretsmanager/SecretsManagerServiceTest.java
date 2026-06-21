@@ -266,8 +266,8 @@ class SecretsManagerServiceTest {
                 "arn:aws:lambda:us-east-1:000000000000:function:rotate",
                 rules, false, REGION);
 
-        // Verify lambda invoked 2 times (createSecret, testSecret)
-        org.mockito.Mockito.verify(mockLambda, org.mockito.Mockito.timeout(5000).times(2))
+        // Verify lambda invoked 1 time (testSecret only for non-immediate rotation)
+        org.mockito.Mockito.verify(mockLambda, org.mockito.Mockito.timeout(5000).times(1))
                 .invoke(org.mockito.Mockito.eq(REGION),
                         org.mockito.Mockito.eq("arn:aws:lambda:us-east-1:000000000000:function:rotate"), 
                         org.mockito.Mockito.any(byte[].class),
