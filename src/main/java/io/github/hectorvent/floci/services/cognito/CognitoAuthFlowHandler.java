@@ -234,10 +234,11 @@ final class CognitoAuthFlowHandler {
         if (parts != null) {
             String username = parts[1];
             String tokenClientId = parts[2];
+            long iat = parts.length > 3 && !parts[3].isEmpty() ? Long.parseLong(parts[3]) : 0L;
             String refreshTokenUuid = parts.length > 4 ? parts[4] : null;
             
             // Check revocation before issuing new tokens
-            service.validateRefreshTokenNotRevoked(refreshTokenUuid, pool.getId(), username);
+            service.validateRefreshTokenNotRevoked(refreshTokenUuid, pool.getId(), username, iat);
             
             try {
                 CognitoUser user = service.adminGetUser(pool.getId(), username);

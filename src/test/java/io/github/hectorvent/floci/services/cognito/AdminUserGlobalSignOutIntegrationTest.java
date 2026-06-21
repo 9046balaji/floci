@@ -179,6 +179,18 @@ class AdminUserGlobalSignOutIntegrationTest {
         String newRefresh = auth.path("AuthenticationResult").path("RefreshToken").asText();
         assertFalse(newRefresh.isBlank(), "Fresh login must succeed after global sign-out");
         assertNotEquals(refreshToken, newRefresh, "New session must issue a new RefreshToken");
+
+        // Verify the new refresh token works
+        JsonNode refreshed = cognitoJson("InitiateAuth", """
+                {
+                  "ClientId": "%s",
+                  "AuthFlow": "REFRESH_TOKEN_AUTH",
+                  "AuthParameters": {"REFRESH_TOKEN": "%s"}
+                }
+                """.formatted(clientId, newRefresh));
+
+        String newAccess = refreshed.path("AuthenticationResult").path("AccessToken").asText();
+        assertFalse(newAccess.isBlank(), "Refresh should succeed for new tokens issued after global sign-out");
     }
 
     @Test

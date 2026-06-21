@@ -1161,7 +1161,8 @@ public class CognitoService {
         
         // Check if access token has been revoked
         validateTokenNotRevoked(jti, poolId, "access");
-        validateUserNotGloballySignedOut(username, poolId, "access");
+        Long iat = extractIatFromToken(accessToken);
+        validateUserNotGloballySignedOut(username, poolId, "access", iat != null ? iat : 0L);
 
         CognitoUser user = adminGetUser(poolId, username);
         if (user.getPasswordHash() != null && !user.getPasswordHash().equals(hashPassword(previousPassword))) {
@@ -1224,7 +1225,8 @@ public class CognitoService {
         
         // Check if access token has been revoked
         validateTokenNotRevoked(jti, poolId, "access");
-        validateUserNotGloballySignedOut(username, poolId, "access");
+        Long iat = extractIatFromToken(accessToken);
+        validateUserNotGloballySignedOut(username, poolId, "access", iat != null ? iat : 0L);
         
         CognitoUser user = adminGetUser(poolId, username);
         Map<String, Object> result = new HashMap<>();
@@ -1246,7 +1248,8 @@ public class CognitoService {
         
         // Check if access token has been revoked
         validateTokenNotRevoked(jti, poolId, "access");
-        validateUserNotGloballySignedOut(username, poolId, "access");
+        Long iat = extractIatFromToken(accessToken);
+        validateUserNotGloballySignedOut(username, poolId, "access", iat != null ? iat : 0L);
         
         adminUpdateUserAttributes(poolId, username, attributes);
     }
@@ -1262,7 +1265,8 @@ public class CognitoService {
         
         // Check if access token has been revoked
         validateTokenNotRevoked(jti, poolId, "access");
-        validateUserNotGloballySignedOut(username, poolId, "access");
+        Long iat = extractIatFromToken(accessToken);
+        validateUserNotGloballySignedOut(username, poolId, "access", iat != null ? iat : 0L);
         
         adminDeleteUserAttributes(poolId, username, attributeNames);
     }
@@ -1354,7 +1358,11 @@ public class CognitoService {
         
         // Check if refresh token has been revoked
         validateTokenNotRevoked(refreshTokenUuid, poolId, "refresh");
-        validateUserNotGloballySignedOut(username, poolId, "refresh");
+        long issuedAt = 0L;
+        try {
+            issuedAt = Long.parseLong(parts[3]);
+        } catch (NumberFormatException ignored) {}
+        validateUserNotGloballySignedOut(username, poolId, "refresh", issuedAt);
         
         UserPool pool = describeUserPool(poolId);
         CognitoUser user = adminGetUser(poolId, username);
@@ -2082,14 +2090,36 @@ public class CognitoService {
             return null;
         }
     }
+
+    private Long extractIatFromToken(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return null;
+            String payloadJson = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+            String iatStr = extractJsonField(payloadJson, "iat");
+            if (iatStr != null) {
+                return Long.parseLong(iatStr);
+            }
+            // In case the simple extractor doesn't work for numbers (it extracts strings between quotes usually)
+            // let's use MAPPER for this specific field
+            Map<String, Object> payload = MAPPER.readValue(payloadJson, new TypeReference<>() {});
+            Object iat = payload.get("iat");
+            if (iat instanceof Number n) {
+                return n.longValue();
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
+    }
     
     /**
      * Validate that a refresh token has not been revoked, including global user sign-out.
      * Called from CognitoAuthFlowHandler for the REFRESH_TOKEN_AUTH flow.
      */
-    void validateRefreshTokenNotRevoked(String jti, String poolId, String username) {
+    void validateRefreshTokenNotRevoked(String jti, String poolId, String username, long iat) {
         validateTokenNotRevoked(jti, poolId, "refresh");
-        validateUserNotGloballySignedOut(username, poolId, "refresh");
+        validateUserNotGloballySignedOut(username, poolId, "refresh", iat);
     }
     
     /**
@@ -2132,20 +2162,22 @@ public class CognitoService {
      * Check if a user has been globally signed out (affects all their tokens).
      * This method should be called in addition to validateTokenNotRevoked.
      */
-    private void validateUserNotGloballySignedOut(String username, String poolId, String tokenType) {
+    private void validateUserNotGloballySignedOut(String username, String poolId, String tokenType, long iat) {
         String globalRevokeKey = revokedTokenKey(poolId, "global:" + username);
         Optional<RevokedTokenInfo> globalRevoked = revokedTokenStore.get(globalRevokeKey);
         
         if (globalRevoked.isPresent()) {
             RevokedTokenInfo globalInfo = globalRevoked.get();
             if (!globalInfo.isExpired()) {
-                String errorMessage = switch (tokenType) {
-                    case "access" -> "Access Token has been revoked";
-                    case "id" -> "ID Token has been revoked"; 
-                    case "refresh" -> "Refresh Token has been revoked";
-                    default -> "Token has been revoked";
-                };
-                throw new AwsException("NotAuthorizedException", errorMessage, 400);
+                if (iat < globalInfo.getRevokedAt()) {
+                    String errorMessage = switch (tokenType) {
+                        case "access" -> "Access Token has been revoked";
+                        case "id" -> "ID Token has been revoked"; 
+                        case "refresh" -> "Refresh Token has been revoked";
+                        default -> "Token has been revoked";
+                    };
+                    throw new AwsException("NotAuthorizedException", errorMessage, 400);
+                }
             } else {
                 revokedTokenStore.delete(globalRevokeKey);
             }
