@@ -398,9 +398,6 @@ public class SecretsManagerService {
 
     private void executeRotationLifecycle(String secretArn, String clientRequestToken, String lambdaArn, boolean rotateImmediately, boolean isExistingVersion, String region) {
         if (!rotateImmediately) {
-            if (!isExistingVersion) {
-                invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "createSecret", region);
-            }
             invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "testSecret", region);
             
             Secret refreshed = resolveSecret(secretArn, region);
