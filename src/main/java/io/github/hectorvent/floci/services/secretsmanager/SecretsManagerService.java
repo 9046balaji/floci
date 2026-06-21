@@ -168,7 +168,9 @@ public class SecretsManagerService {
             SecretVersion existingVersion = secret.getVersions().get(clientRequestToken);
             if (!Objects.equals(existingVersion.getSecretString(), secretString) ||
                 !Objects.equals(existingVersion.getSecretBinary(), secretBinary)) {
-                throw new AwsException("InvalidParameterException", "You provided a ClientRequestToken that matches the ID of an existing version, but the payload doesn't match the existing payload.", 400);
+                throw new AwsException("ResourceExistsException",
+                    "You can't use ClientRequestToken " + clientRequestToken
+                        + " because that value is already in use for a version of secret " + secret.getArn(), 400);
             }
             return existingVersion;
         }
@@ -342,6 +344,19 @@ public class SecretsManagerService {
                     "You tried to enable rotation on a secret that doesn't already have a Lambda function ARN configured and you didn't include such an ARN as a parameter in this call.", 400);
         }
 
+        // Validate Lambda exists synchronously
+        if (lambdaService != null) {
+            try {
+                lambdaService.getFunction(region, finalLambdaArn);
+            } catch (AwsException e) {
+                if (e.getHttpStatus() == 404) {
+                    throw new AwsException("ResourceNotFoundException",
+                            "Secrets Manager cannot find the specified Lambda function.", 404);
+                }
+                throw e;
+            }
+        }
+
         synchronized (lockFor(secret.getArn())) {
             SecretVersion pendingVersion = findVersionByStage(secret, "AWSPENDING");
             if (pendingVersion != null) {
@@ -366,9 +381,11 @@ public class SecretsManagerService {
 
         String arn = secret.getArn();
         String finalToken = clientRequestToken != null && !clientRequestToken.isEmpty() ? clientRequestToken : UUID.randomUUID().toString();
+        boolean isExistingVersion = secret.getVersions() != null && secret.getVersions().containsKey(finalToken);
+        
         rotationExecutor.submit(() -> {
             try {
-                executeRotationLifecycle(arn, finalToken, finalLambdaArn, rotateImmediately, region);
+                executeRotationLifecycle(arn, finalToken, finalLambdaArn, rotateImmediately, isExistingVersion, region);
             } catch (Exception e) {
                 LOG.errorv(e, "Rotation lifecycle failed for secret {0}", arn);
             }
@@ -379,9 +396,11 @@ public class SecretsManagerService {
     }
 
 
-    private void executeRotationLifecycle(String secretArn, String clientRequestToken, String lambdaArn, boolean rotateImmediately, String region) {
+    private void executeRotationLifecycle(String secretArn, String clientRequestToken, String lambdaArn, boolean rotateImmediately, boolean isExistingVersion, String region) {
         if (!rotateImmediately) {
-            invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "createSecret", region);
+            if (!isExistingVersion) {
+                invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "createSecret", region);
+            }
             invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "testSecret", region);
             
             Secret refreshed = resolveSecret(secretArn, region);
@@ -396,8 +415,10 @@ public class SecretsManagerService {
         }
 
         try {
-            invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "createSecret", region);
-            invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "setSecret", region);
+            if (!isExistingVersion) {
+                invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "createSecret", region);
+                invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "setSecret", region);
+            }
             invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "testSecret", region);
             invokeRotationLambda(secretArn, clientRequestToken, lambdaArn, "finishSecret", region);
             

@@ -11,6 +11,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -221,8 +222,16 @@ public class SecretsManagerJsonHandler {
         if (secret.getLastRotatedDate() != null) {
             response.put("LastRotatedDate", secret.getLastRotatedDate().toEpochMilli() / 1000.0);
         }
-        if (secret.getNextRotationDate() != null) {
-            response.put("NextRotationDate", secret.getNextRotationDate().toEpochMilli() / 1000.0);
+        
+        Instant nextRotationDate = secret.getNextRotationDate();
+        if (nextRotationDate == null && secret.isRotationEnabled() && secret.getRotationRules() != null && secret.getRotationRules().automaticallyAfterDays() != null) {
+            Instant lastRotated = secret.getLastRotatedDate() != null ? secret.getLastRotatedDate() : secret.getCreatedDate();
+            if (lastRotated != null) {
+                nextRotationDate = lastRotated.plusSeconds((long) secret.getRotationRules().automaticallyAfterDays() * 86400);
+            }
+        }
+        if (nextRotationDate != null) {
+            response.put("NextRotationDate", nextRotationDate.toEpochMilli() / 1000.0);
         }
         if (secret.getCreatedDate() != null) {
             response.put("CreatedDate", secret.getCreatedDate().toEpochMilli() / 1000.0);
