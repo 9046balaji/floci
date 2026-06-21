@@ -1979,7 +1979,7 @@ public class CognitoService {
     }
 
     String buildRefreshToken(String poolId, String username, String clientId) {
-        long issuedAt = System.currentTimeMillis() / 1000L;
+        long issuedAt = System.currentTimeMillis();
         String raw = poolId + "|" + username + "|" + clientId + "|" + issuedAt + "|" + UUID.randomUUID();
         return Base64.getEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
@@ -2169,7 +2169,19 @@ public class CognitoService {
         if (globalRevoked.isPresent()) {
             RevokedTokenInfo globalInfo = globalRevoked.get();
             if (!globalInfo.isExpired()) {
-                if (iat < globalInfo.getRevokedAt()) {
+                long revokedAtMs = globalInfo.getRevokedAt();
+                boolean revoked = false;
+                
+                if (iat > 1000000000000L) {
+                    // iat is in milliseconds (refresh token)
+                    revoked = iat <= revokedAtMs;
+                } else if (iat > 0) {
+                    // iat is in seconds (access or id token)
+                    // If iat_seconds * 1000 <= revokedAt_ms, then the token was issued at or before the revocation second
+                    revoked = (iat * 1000L) <= revokedAtMs;
+                }
+
+                if (revoked) {
                     String errorMessage = switch (tokenType) {
                         case "access" -> "Access Token has been revoked";
                         case "id" -> "ID Token has been revoked"; 
@@ -2189,7 +2201,7 @@ public class CognitoService {
      * This implements the core logic for AdminUserGlobalSignOut.
      */
     private void revokeAllUserTokens(String userPoolId, String username) {
-        long now = System.currentTimeMillis() / 1000L;
+        long nowMs = System.currentTimeMillis();
         
         // Note: In a real implementation, we would need to track all active tokens for a user.
         // Since Floci doesn't currently maintain a token registry, we implement a simpler
@@ -2199,14 +2211,14 @@ public class CognitoService {
         // Create a revocation record for the user with a future expiration
         // This will catch any existing tokens when they're next validated
         String globalRevokeKey = revokedTokenKey(userPoolId, "global:" + username);
-        long globalExpiration = now + (365 * 24 * 60 * 60); // 1 year from now
+        long globalExpiration = nowMs + (365L * 24L * 60L * 60L * 1000L); // 1 year from now in ms
         
         RevokedTokenInfo globalRevocation = new RevokedTokenInfo(
             "global:" + username,
             "global",
             username,
             userPoolId,
-            now,
+            nowMs,
             globalExpiration
         );
         
