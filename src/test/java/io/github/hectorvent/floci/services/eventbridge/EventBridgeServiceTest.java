@@ -9,7 +9,6 @@ import io.github.hectorvent.floci.services.eventbridge.model.EventBus;
 import io.github.hectorvent.floci.services.eventbridge.model.Rule;
 import io.github.hectorvent.floci.services.eventbridge.model.RuleState;
 import io.github.hectorvent.floci.services.eventbridge.model.Target;
-import io.github.hectorvent.floci.services.resourcegroupstagging.ResourceGroupsTaggingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -43,8 +42,7 @@ class EventBridgeServiceTest {
                 new ObjectMapper(),
                 null,
                 invokerMock,
-                null,
-                new ResourceGroupsTaggingService()
+                null
         );
     }
 
