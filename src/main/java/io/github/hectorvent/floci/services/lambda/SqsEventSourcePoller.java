@@ -284,7 +284,10 @@ public class SqsEventSourcePoller {
                 attrs.put("ApproximateReceiveCount", String.valueOf(msg.getReceiveCount()));
                 attrs.put("SentTimestamp", String.valueOf(msg.getSentTimestamp().toEpochMilli()));
                 attrs.put("SenderId", AwsArnUtils.accountOrDefault(esm.getEventSourceArn(), "000000000000"));
-                attrs.put("ApproximateFirstReceiveTimestamp", String.valueOf(System.currentTimeMillis()));
+                attrs.put("ApproximateFirstReceiveTimestamp",
+                        String.valueOf(msg.getFirstReceiveTimestamp() != null
+                                ? msg.getFirstReceiveTimestamp().toEpochMilli()
+                                : System.currentTimeMillis()));
                 record.putObject("messageAttributes");
                 record.put("md5OfBody", msg.getMd5OfBody() != null ? msg.getMd5OfBody() : "");
                 record.put("eventSource", "aws:sqs");

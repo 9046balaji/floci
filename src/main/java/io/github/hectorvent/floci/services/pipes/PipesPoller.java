@@ -410,7 +410,10 @@ public class PipesPoller {
             attrs.put("ApproximateReceiveCount", String.valueOf(msg.getReceiveCount()));
             attrs.put("SentTimestamp", String.valueOf(msg.getSentTimestamp().toEpochMilli()));
             attrs.put("SenderId", AwsArnUtils.accountOrDefault(pipe.getSource(), "000000000000"));
-            attrs.put("ApproximateFirstReceiveTimestamp", String.valueOf(System.currentTimeMillis()));
+            attrs.put("ApproximateFirstReceiveTimestamp",
+                    String.valueOf(msg.getFirstReceiveTimestamp() != null
+                            ? msg.getFirstReceiveTimestamp().toEpochMilli()
+                            : System.currentTimeMillis()));
             ObjectNode msgAttrs = record.putObject("messageAttributes");
             for (Map.Entry<String, MessageAttributeValue> entry : msg.getMessageAttributes().entrySet()) {
                 ObjectNode attrNode = msgAttrs.putObject(entry.getKey());
