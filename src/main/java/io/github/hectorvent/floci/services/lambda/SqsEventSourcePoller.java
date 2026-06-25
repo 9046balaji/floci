@@ -288,6 +288,15 @@ public class SqsEventSourcePoller {
                         String.valueOf(msg.getFirstReceiveTimestamp() != null
                                 ? msg.getFirstReceiveTimestamp().toEpochMilli()
                                 : System.currentTimeMillis()));
+                if (msg.getSequenceNumber() > 0) {
+                    attrs.put("SequenceNumber", String.valueOf(msg.getSequenceNumber()));
+                }
+                if (msg.getMessageGroupId() != null) {
+                    attrs.put("MessageGroupId", msg.getMessageGroupId());
+                }
+                if (msg.getMessageDeduplicationId() != null) {
+                    attrs.put("MessageDeduplicationId", msg.getMessageDeduplicationId());
+                }
                 // Populate messageAttributes from the message model
                 ObjectNode msgAttrs = record.putObject("messageAttributes");
                 if (msg.getMessageAttributes() != null) {
