@@ -192,6 +192,7 @@ public interface EmulatorConfig {
         EcsStorageConfig ecs();
         CodeBuildStorageConfig codebuild();
         ConfigStorageConfig config();
+        CodeDeployStorageConfig codedeploy();
     }
 
     interface SsmStorageConfig {
@@ -365,6 +366,13 @@ public interface EmulatorConfig {
         long flushIntervalMs();
     }
 
+    interface CodeDeployStorageConfig {
+        Optional<String> mode();
+
+        @WithDefault("5000")
+        long flushIntervalMs();
+    }
+
     interface WalConfig {
         @WithDefault("30000")
         long compactionIntervalMs();
@@ -430,6 +438,7 @@ public interface EmulatorConfig {
         CodeDeployServiceConfig codedeploy();
         CodePipelineServiceConfig codepipeline();
         AutoScalingServiceConfig autoscaling();
+        ElasticBeanstalkServiceConfig elasticbeanstalk();
         BackupServiceConfig backup();
         NeptuneServiceConfig neptune();
         DocDbServiceConfig docdb();
@@ -449,6 +458,34 @@ public interface EmulatorConfig {
         BatchServiceConfig batch();
         UiServiceConfig ui();
         S3VectorsServiceConfig s3vectors();
+        IotServiceConfig iot();
+        IotDataServiceConfig iotdata();
+    }
+
+    interface IotServiceConfig {
+        @WithDefault("true")
+        boolean enabled();
+
+        MqttConfig mqtt();
+    }
+
+    interface MqttConfig {
+        @WithDefault("true")
+        boolean enabled();
+
+        @WithDefault("false")
+        boolean autoStart();
+
+        @WithDefault("0.0.0.0")
+        String host();
+
+        @WithDefault("1883")
+        int port();
+    }
+
+    interface IotDataServiceConfig {
+        @WithDefault("true")
+        boolean enabled();
     }
 
     interface CloudTrailServiceConfig {
@@ -497,6 +534,11 @@ public interface EmulatorConfig {
     }
 
     interface AutoScalingServiceConfig {
+        @WithDefault("true")
+        boolean enabled();
+    }
+
+    interface ElasticBeanstalkServiceConfig {
         @WithDefault("true")
         boolean enabled();
     }
@@ -593,6 +635,12 @@ public interface EmulatorConfig {
 
         @WithDefault("redpandadata/redpanda:latest")
         String defaultImage();
+
+        @WithDefault("9300")
+        int kafkaHostPortBase();
+
+        @WithDefault("9399")
+        int kafkaHostPortMax();
     }
 
     interface ElastiCacheServiceConfig {
